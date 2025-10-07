@@ -6,10 +6,17 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Auth; 
 
 class AuthController extends Controller
 {
-    // Registro de usuario
+    // Mostrar formulario de login web
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+
     public function register(Request $request)
     {
         $request->validate([
@@ -32,9 +39,24 @@ class AuthController extends Controller
         ], 201);
     }
 
-    // Login de usuario
+    // Login de usuario (API)
     public function login(Request $request)
     {
+        // Validación del formulario web
+        if ($request->has('email') && $request->has('password') && !$request->expectsJson()) {
+            $credentials = $request->only('email', 'password');
+
+            if (Auth::attempt($credentials)) {
+                $request->session()->regenerate();
+                return redirect()->intended('/dashboard');
+            }
+
+            return back()->withErrors([
+                'email' => 'Las credenciales no son correctas.',
+            ]);
+        }
+
+        // Login API (token)
         $request->validate([
             'email' => 'required|email',
             'password' => 'required'
@@ -56,13 +78,23 @@ class AuthController extends Controller
         ]);
     }
 
-    // Logout
+    // Logout (web y API)
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        // Logout web
+        if ($request->user() && $request->expectsJson() === false) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect('/login');
+        }
 
-        return response()->json([
-            'message' => 'Token eliminado correctamente.'
-        ]);
+        // Logout API
+        if ($request->user()) {
+            $request->user()->currentAccessToken()->delete();
+            return response()->json([
+                'message' => 'Token eliminado correctamente.'
+            ]);
+        }
     }
 }
